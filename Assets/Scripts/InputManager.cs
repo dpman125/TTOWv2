@@ -12,10 +12,12 @@ public class InputManager : MonoBehaviour
     private Vector2 m_moveAmt;
     private Vector2 m_lookAmt;
     private Rigidbody m_rb;
+    public GameObject PlayerCamera;
 
     public float WalkSpeed = 5;
     public float RotateSpeed = 5;
     public float JumpSpeed = 5;
+    
     //PlayerControls.GroundMovementActions.groundMovement;
 
  private void OnEnable()
@@ -33,7 +35,7 @@ public class InputManager : MonoBehaviour
         m_moveAction = InputSystem.actions.FindAction("Move");
         m_lookAction = InputSystem.actions.FindAction("Look");
         m_jumpAction = InputSystem.actions.FindAction("Jump");
-
+        Cursor.visible = false;
         m_rb = GetComponent<Rigidbody>();
     }
 
@@ -45,6 +47,14 @@ public class InputManager : MonoBehaviour
         if (m_jumpAction.WasPressedThisFrame())
         {
             Jump();
+        }
+        if (PlayerCamera.transform.rotation.x <= -70)
+        {
+            PlayerCamera.transform.rotation = Quaternion.Euler(70, 0, 0);
+        }
+        if (PlayerCamera.transform.rotation.x >= 70)
+        {
+            PlayerCamera.transform.rotation = Quaternion.Euler(70, 0, 0);
         }
     }
 
@@ -62,15 +72,20 @@ public class InputManager : MonoBehaviour
     private void Walking()
     {
         m_rb.MovePosition(m_rb.position + transform.forward * m_moveAmt.y * WalkSpeed * Time.deltaTime);
+        m_rb.MovePosition(m_rb.position + transform.right * m_moveAmt.x * WalkSpeed * Time.deltaTime);
+
     }
 
     private void Rotating()
     {
-        if (m_moveAmt.y  != 0)
-        {
-            float rotation = m_lookAmt.x * RotateSpeed * Time.deltaTime;
-            Quaternion deltaRotation = Quaternion.Euler(0, rotation, 0);
-            m_rb.MoveRotation(m_rb.rotation * deltaRotation);
-        }
+        float rotationx = m_lookAmt.x * RotateSpeed * Time.deltaTime;
+        Quaternion deltaRotationx = Quaternion.Euler(0, rotationx, 0);
+        transform.Rotate(new Vector3(0, rotationx * RotateSpeed, 0));
+
+        float rotationy = m_lookAmt.y * RotateSpeed * Time.deltaTime;
+        Quaternion deltaRotationy = Quaternion.Euler(rotationy, 0, 0);
+        PlayerCamera.transform.Rotate(-rotationy * RotateSpeed, 0, 0);
+
+        
     }
 }
