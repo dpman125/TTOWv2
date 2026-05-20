@@ -1,3 +1,7 @@
+using JetBrains.Annotations;
+using System;
+using System.Runtime.CompilerServices;
+using UnityEditor.PackageManager;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -8,15 +12,35 @@ public class InputManager : MonoBehaviour
     private InputAction m_moveAction;
     private InputAction m_lookAction;
     private InputAction m_jumpAction;
+    private InputAction m_sprintAction;
+    private InputAction m_crouchAction;
 
     private Vector2 m_moveAmt;
     private Vector2 m_lookAmt;
     private Rigidbody m_rb;
-    public GameObject PlayerCamera;
 
-    public float WalkSpeed = 5;
-    public float RotateSpeed = 5;
-    public float JumpSpeed = 5;
+    [Header("GameObject References")]
+    public GameObject PlayerCamera;
+    public GameObject playerBody;
+
+    [Header("Mobility Settings")]
+    public bool isSprinting = false;
+    public bool isCrouching = false;
+    public bool isCrawling = false;
+    public float moveSpeed = 5;
+    public float walkSpeed = 5;
+    public float sprintSpeed = 10;
+    public float crouchSpeed = 3;
+    public float crawlSpeed = 1;
+    public float rotateSpeed = 5;
+    public float jumpSpeed = 5;
+    public float jumpSpeedWalk = 3;
+    public float jumpSpeedCrouch = 1;
+    public float jumpSpeedCrawl = .25f;
+    public Vector3 walkScale = new Vector3(1f, 1f, 1f);
+    public Vector3 crouchScale = new Vector3(1f, .7f, 1f);
+    public Vector3 crawlScale = new Vector3(1f, .3f, 2f);
+    private Vector3 previousScale;
     
     //PlayerControls.GroundMovementActions.groundMovement;
 
@@ -32,22 +56,85 @@ public class InputManager : MonoBehaviour
 
     private void Awake()
     {
-        m_moveAction = InputSystem.actions.FindAction("Move");
-        m_lookAction = InputSystem.actions.FindAction("Look");
-        m_jumpAction = InputSystem.actions.FindAction("Jump");
+        previousScale = playerBody.transform.localScale;
+        m_moveAction = InputActions.FindAction("Player/Move");
+        m_lookAction = InputActions.FindAction("Player/Look");
+        m_jumpAction = InputActions.FindAction("Player/Jump");
+        m_sprintAction = InputActions.FindAction("Player/Sprint");
+        m_crouchAction = InputActions.FindAction("Player/Crouch");
+        if (m_moveAction == null)
+        {
+            Debug.LogError("m_moveAction = null");
+        }
         Cursor.visible = false;
         m_rb = GetComponent<Rigidbody>();
     }
 
     private void Update()
     {
+        isSprinting = m_sprintAction.IsPressed();
         m_moveAmt = m_moveAction.ReadValue<Vector2>();
         m_lookAmt = m_lookAction.ReadValue<Vector2>();
-
+        Moving();
+        Rotating();
         if (m_jumpAction.WasPressedThisFrame())
         {
             Jump();
         }
+        if (m_crouchAction.WasPressedThisFrame())
+        {
+            if (!isCrouching && !isCrawling)
+            {
+                //transition from walk to crawl
+                isCrouching = true;
+            }
+            else if (!isCrawling && isCrouching)
+            {
+                // transition from crawl to crouch
+                isCrawling = true;
+                isCrouching = false;
+            }
+            else
+            {
+                isCrawling = false;
+            }
+            
+        }
+    }
+
+    public void Jump()
+    {
+        m_rb.AddForceAtPosition(new Vector3(0, jumpSpeed, 0), Vector3.up, ForceMode.Impulse);
+    }
+
+    private void Moving()
+    {
+        if (isSprinting)
+        {
+            isCrouching = false;
+            isCrawling = false;
+            Sprint();
+        }
+        else if (isCrouching)
+        {
+            Crouch();
+        }
+        else if (isCrawling)
+        {
+            Crawl();
+        }
+        else
+        {
+            Walking();
+        }
+        m_rb.MovePosition(m_rb.position + transform.forward * m_moveAmt.y * moveSpeed * Time.deltaTime);
+        m_rb.MovePosition(m_rb.position + transform.right * m_moveAmt.x * moveSpeed * Time.deltaTime);
+
+    }
+
+    private void Rotating()
+    {
+        // restricts player rotation
         if (PlayerCamera.transform.rotation.x <= -70)
         {
             PlayerCamera.transform.rotation = Quaternion.Euler(70, 0, 0);
@@ -56,36 +143,66 @@ public class InputManager : MonoBehaviour
         {
             PlayerCamera.transform.rotation = Quaternion.Euler(70, 0, 0);
         }
-    }
 
-    private void FixedUpdate()
-    {
-        Walking();
-        Rotating();
-    }
-
-    public void Jump()
-    {
-        m_rb.AddForceAtPosition(new Vector3(0, 5f, 0), Vector3.up, ForceMode.Impulse);
-    }
-
-    private void Walking()
-    {
-        m_rb.MovePosition(m_rb.position + transform.forward * m_moveAmt.y * WalkSpeed * Time.deltaTime);
-        m_rb.MovePosition(m_rb.position + transform.right * m_moveAmt.x * WalkSpeed * Time.deltaTime);
-
-    }
-
-    private void Rotating()
-    {
-        float rotationx = m_lookAmt.x * RotateSpeed * Time.deltaTime;
+        float rotationx = m_lookAmt.x * rotateSpeed * Time.deltaTime;
         Quaternion deltaRotationx = Quaternion.Euler(0, rotationx, 0);
-        transform.Rotate(new Vector3(0, rotationx * RotateSpeed, 0));
+        transform.Rotate(new Vector3(0, rotationx * rotateSpeed, 0));
 
-        float rotationy = m_lookAmt.y * RotateSpeed * Time.deltaTime;
+        float rotationy = m_lookAmt.y * rotateSpeed * Time.deltaTime;
         Quaternion deltaRotationy = Quaternion.Euler(rotationy, 0, 0);
-        PlayerCamera.transform.Rotate(-rotationy * RotateSpeed, 0, 0);
+        PlayerCamera.transform.Rotate(-rotationy * rotateSpeed, 0, 0);
 
-        
+    }
+    public void Sprint()
+    {
+        Debug.Log("sprinting");
+        // sprinting animations will be added here
+
+        moveSpeed = sprintSpeed;
+    }
+
+
+    public void Walking()
+    {
+
+        moveSpeed = walkSpeed;
+        jumpSpeed = jumpSpeedWalk;
+        Vector3 oldScale = playerBody.transform.localScale;
+        playerBody.transform.localScale = walkScale;
+
+        // Snap to ground: move up by half the difference in height
+        float heightDiff = (walkScale.y - oldScale.y) * playerBody.GetComponent<Collider>().bounds.size.y / oldScale.y;
+        playerBody.transform.position += new Vector3(0, heightDiff / 2f, 0);
+
+        previousScale = walkScale;
+
+    }
+
+    public void Crouch()
+    {
+        moveSpeed = crouchSpeed;
+        jumpSpeed = jumpSpeedCrouch;
+        Vector3 oldScale = playerBody.transform.localScale;
+        playerBody.transform.localScale = crouchScale;
+
+        // Snap to ground: move down by half the difference in height
+        float heightDiff = (oldScale.y - crouchScale.y) * playerBody.GetComponent<Collider>().bounds.size.y / oldScale.y;
+        playerBody.transform.position -= new Vector3(0, heightDiff / 2f, 0);
+
+        previousScale = crouchScale;
+    }
+
+    public void Crawl()
+    {
+        moveSpeed = crawlSpeed;
+        jumpSpeed = jumpSpeedCrawl;
+        Vector3 oldScale = playerBody.transform.localScale;
+        playerBody.transform.localScale = crawlScale;
+
+        // Snap to ground: move down by half the difference in height
+        float heightDiff = (oldScale.y - crawlScale.y) * playerBody.GetComponent<Collider>().bounds.size.y / oldScale.y;
+        playerBody.transform.position -= new Vector3(0, heightDiff / 2f, 0);
+
+        previousScale = crawlScale;
     }
 }
