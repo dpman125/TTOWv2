@@ -14,6 +14,7 @@ public class InputManager : MonoBehaviour
     private InputAction m_jumpAction;
     private InputAction m_sprintAction;
     private InputAction m_crouchAction;
+    private InputAction m_interactAction;
 
     private Vector2 m_moveAmt;
     private Vector2 m_lookAmt;
@@ -40,7 +41,14 @@ public class InputManager : MonoBehaviour
     public Vector3 walkScale = new Vector3(1f, 1f, 1f);
     public Vector3 crouchScale = new Vector3(1f, .7f, 1f);
     public Vector3 crawlScale = new Vector3(1f, .3f, 2f);
-    private Vector3 previousScale;
+    [SerializeField] private float mouseSensitivity = 100f;
+    [SerializeField] private float minVerticalAngle = -90f;
+    [SerializeField] private float maxVerticalAngle = 90f; 
+    [SerializeField] private Vector3 previousScale;
+
+    [Header("Interactables")]
+    public GameObject EquippedObject;
+    public bool canInteract;
     
     //PlayerControls.GroundMovementActions.groundMovement;
 
@@ -62,6 +70,7 @@ public class InputManager : MonoBehaviour
         m_jumpAction = InputActions.FindAction("Player/Jump");
         m_sprintAction = InputActions.FindAction("Player/Sprint");
         m_crouchAction = InputActions.FindAction("Player/Crouch");
+        m_interactAction = InputActions.FindAction("Player/Interact");
         if (m_moveAction == null)
         {
             Debug.LogError("m_moveAction = null");
@@ -100,6 +109,10 @@ public class InputManager : MonoBehaviour
             }
             
         }
+        if (m_interactAction.WasPressedThisFrame())
+        {
+            Interact();
+        }
     }
 
     public void Jump()
@@ -134,23 +147,14 @@ public class InputManager : MonoBehaviour
 
     private void Rotating()
     {
-        // restricts player rotation
-        if (PlayerCamera.transform.rotation.x <= -70)
-        {
-            PlayerCamera.transform.rotation = Quaternion.Euler(70, 0, 0);
-        }
-        if (PlayerCamera.transform.rotation.x >= 70)
-        {
-            PlayerCamera.transform.rotation = Quaternion.Euler(70, 0, 0);
-        }
 
         float rotationx = m_lookAmt.x * rotateSpeed * Time.deltaTime;
-        Quaternion deltaRotationx = Quaternion.Euler(0, rotationx, 0);
-        transform.Rotate(new Vector3(0, rotationx * rotateSpeed, 0));
+        transform.Rotate(new Vector3(0, rotationx, 0));
 
-        float rotationy = m_lookAmt.y * rotateSpeed * Time.deltaTime;
-        Quaternion deltaRotationy = Quaternion.Euler(rotationy, 0, 0);
-        PlayerCamera.transform.Rotate(-rotationy * rotateSpeed, 0, 0);
+        
+
+        float rotationy = Mathf.Clamp(m_lookAmt.y * rotateSpeed * Time.deltaTime, minVerticalAngle, maxVerticalAngle);
+        PlayerCamera.transform.Rotate(-rotationy,0,0);
 
     }
     public void Sprint()
@@ -204,5 +208,31 @@ public class InputManager : MonoBehaviour
         playerBody.transform.position -= new Vector3(0, heightDiff / 2f, 0);
 
         previousScale = crawlScale;
+    }
+
+    public void Interact()
+    {
+        if (canInteract)
+        {
+            Debug.Log("cube has been interacted with.");
+        }
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("interactable") && !canInteract)
+        {
+            Debug.Log("press e to interact.");
+            canInteract = true;
+        }
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (other.CompareTag("interactable") && canInteract)
+        {
+            Debug.Log("you have left the interactable zone.");
+            canInteract = false;
+        }
     }
 }
